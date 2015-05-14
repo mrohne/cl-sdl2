@@ -73,12 +73,20 @@ returning an SDL_true into CL's boolean type system."
 (defvar *lisp-message-event* nil)
 (defvar *wakeup-event* nil)
 
+;; Shamelessly stolen from cl-glut
+(defmacro without-fp-traps (&body body)
+  #+(and sbcl (or x86 x86-64))
+  `(sb-int:with-float-traps-masked (:invalid :inexact :divide-by-zero :overflow)
+     ,@body)
+  #-(and sbcl (or x86 x86-64))
+  `(progn ,@body))
+
 (defmacro in-main-thread ((&key background no-event) &body b)
   (with-gensyms (fun channel)
     `(let ((,fun (lambda () ,@b)))
        (if *main-thread-channel*
            (if *main-thread*
-               (funcall ,fun)
+               (without-fp-traps (funcall ,fun))
                ,(if background
                     `(progn
                        (sendmsg *main-thread-channel*
@@ -111,8 +119,8 @@ returning an SDL_true into CL's boolean type system."
                        (return-from handle-message))))
       (handler-bind ((error (lambda (e) (setf condition e))))
         (if chan
-            (sendmsg chan (multiple-value-list (funcall fun)))
-            (funcall fun))))))
+            (sendmsg chan (multiple-value-list (without-fp-traps (funcall fun))))
+            (without-fp-traps (funcall fun)))))))
 
 (defun recv-and-handle-message ()
   (let ((msg (recvmsg *main-thread-channel*)))
@@ -127,6 +135,7 @@ returning an SDL_true into CL's boolean type system."
   (let ((*main-thread* (bt:current-thread))
         #+swank (swank:*sldb-quit-restart* 'continue)
         #+slynk (slynk:*sly-db-quit-restart* 'continue))
+    (format *trace-output* ";; SDL event loop: ~a~%" *main-thread*)
     (loop while *main-thread-channel* do
       (block loop-block
         (restart-bind ((continue (lambda (&optional v)
@@ -175,7 +184,7 @@ This does **not** call `SDL2:INIT` by itself.  Do this either with
 
     ;; If we did not have a main-thread channel, make a default main
     ;; thread.
-    #-(and ccl darwin)
+    #-darwin
     (bt:make-thread #'sdl-main-thread :name "SDL2 Main Thread")
 
     ;; On OSX, we need to run in the main thread; CCL allows us to
@@ -183,7 +192,10 @@ This does **not** call `SDL2:INIT` by itself.  Do this either with
     ;; to run in a dedicated thread.
     #+(and ccl darwin)
     (let ((thread (find 0 (ccl:all-processes) :key #'ccl:process-serial-number)))
-      (ccl:process-interrupt thread #'sdl-main-thread)))
+      (ccl:process-interrupt thread #'sdl-main-thread))
+    #+(and sbcl darwin)
+    (unless (sb-thread:main-thread-p)
+      (sb-thread:interrupt-thread (sb-thread:main-thread) #'sdl-main-thread)))
   (in-main-thread (:no-event t)
     ;; HACK! glutInit on OSX uses some magic undocumented API to
     ;; correctly make the calling thread the primary thread. This
