@@ -37,6 +37,7 @@ returning an SDL_true into CL's boolean type system."
   sdl2-ffi:+sdl-init-joystick+
   sdl2-ffi:+sdl-init-haptic+
   sdl2-ffi:+sdl-init-gamecontroller+
+  sdl2-ffi:+sdl-init-events+
   sdl2-ffi:+sdl-init-noparachute+
   '(:everything . #x0000FFFF))
 
@@ -84,24 +85,20 @@ returning an SDL_true into CL's boolean type system."
 (defmacro in-main-thread ((&key background no-event) &body b)
   (with-gensyms (fun channel)
     `(let ((,fun (lambda () ,@b)))
-       (if *main-thread-channel*
-           (if *main-thread*
-               (without-fp-traps (funcall ,fun))
-               ,(if background
-                    `(progn
-                       (sendmsg *main-thread-channel*
-                                (cons ,fun nil))
-                       (values))
-                    `(let ((,channel (make-channel)))
-                       (sendmsg *main-thread-channel*
-                                (cons ,fun ,channel))
-                       ,(unless no-event
-                          '(push-event *wakeup-event*))
-                       (let ((result (recvmsg ,channel)))
-                         (etypecase result
-                           (list (values-list result))
-                           (error (error result)))))))
-           (error "No main thread, did you call SDL_Init?")))))
+       (assert *main-thread-channel* nil "No main thread, did you call SDL_Init?")
+       (if *main-thread*
+	   (without-fp-traps (funcall ,fun))
+	   ,(if background
+		`(progn
+		   (sendmsg *main-thread-channel* (cons ,fun nil))
+		   (values))
+		`(let ((,channel (make-channel)))
+		   (sendmsg *main-thread-channel* (cons ,fun ,channel))
+		   ,(unless no-event '(push-event *wakeup-event*))
+		   (let ((result (recvmsg ,channel)))
+		     (etypecase result
+		       (list (values-list result))
+		       (error (error result))))))))))
 
 (defun handle-message (msg)
   (let ((fun (car msg))
@@ -119,16 +116,17 @@ returning an SDL_true into CL's boolean type system."
                        (return-from handle-message))))
       (handler-bind ((error (lambda (e) (setf condition e))))
         (if chan
-            (sendmsg chan (multiple-value-list (funcall fun)))
-            (funcall fun))))))
+            (sendmsg chan (multiple-value-list (without-fp-traps (funcall fun))))
+            (without-fp-traps (funcall fun)))))))
 
 (defun recv-and-handle-message ()
   (let ((msg (recvmsg *main-thread-channel*)))
-    (without-fp-traps (handle-message msg))))
+    (handle-message msg)))
 
 (defun get-and-handle-messages ()
   (loop as msg = (getmsg *main-thread-channel*)
-        while msg do (handle-message msg)))
+        while msg do
+          (handle-message msg)))
 
 (defun sdl-main-thread ()
   (let ((*main-thread* (bt:current-thread))
@@ -175,24 +173,22 @@ This does **not** call `SDL2:INIT` by itself.  Do this either with
 
 (defun init (&rest sdl-init-flags)
   "Initialize SDL2 with the specified subsystems. Initializes everything by default."
+  (unless *wakeup-event*
+    (setf *wakeup-event* (alloc 'sdl2-ffi:sdl-event)))
   (unless *main-thread-channel*
     (ensure-main-channel)
-
-    ;; If we did not have a main-thread channel, make a default main
-    ;; thread.
+    ;; On OSX, we need to run in the main thread; CCL and SBCL allow
+    ;; us to safely do this.  On other platforms (mainly GLX?), we
+    ;; just need to run in a dedicated thread.
     #-darwin
     (bt:make-thread #'sdl-main-thread :name "SDL2 Main Thread")
-
-    ;; On OSX, we need to run in the main thread; CCL allows us to
-    ;; safely do this.  On other platforms (mainly GLX?), we just need
-    ;; to run in a dedicated thread.
-    #+(and ccl darwin)
-    (let ((thread (find 0 (ccl:all-processes) :key #'ccl:process-serial-number)))
-      (ccl:process-interrupt thread #'sdl-main-thread))
     #+(and sbcl darwin)
     (if (sb-thread:main-thread-p)
 	(format *trace-output* ";; Please run ~s in ~s~%" #'make-this-thread-main (sb-thread:main-thread))
-	(sb-thread:interrupt-thread (sb-thread:main-thread) #'sdl-main-thread)))
+	(sb-thread:interrupt-thread (sb-thread:main-thread) #'sdl-main-thread))
+    #+(and ccl darwin)
+    (let ((thread (find 0 (ccl:all-processes) :key #'ccl:process-serial-number)))
+      (ccl:process-interrupt thread #'sdl-main-thread)))
   (in-main-thread (:no-event t)
     ;; HACK! glutInit on OSX uses some magic undocumented API to
     ;; correctly make the calling thread the primary thread. This
@@ -200,12 +196,10 @@ This does **not** call `SDL2:INIT` by itself.  Do this either with
     ;; work at all to be honest.
     #+(and ccl darwin)
     (cl-glut:init)
-    (let ((init-flags (autowrap:mask-apply 'sdl-init-flags sdl-init-flags)))
+    (let ((init-flags (mask-apply 'sdl-init-flags sdl-init-flags)))
       (check-rc (sdl-init init-flags))
       (unless *lisp-message-event*
-        (setf *lisp-message-event* (sdl-register-events 1)))
-      (unless *wakeup-event*
-	(setf *wakeup-event* (alloc 'sdl2-ffi:sdl-event))
+        (setf *lisp-message-event* (sdl-register-events 1))
         (setf (c-ref *wakeup-event* sdl2-ffi:sdl-event :type) *lisp-message-event*)))))
 
 (defun quit ()

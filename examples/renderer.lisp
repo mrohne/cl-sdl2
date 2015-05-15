@@ -79,8 +79,7 @@
   "Test the SDL_render.h API"
   (sdl2:with-init (:everything)
     (sdl2:with-window (win :title "SDL2 Renderer API Demo" :flags '(:shown))
-      (sdl2:with-renderer (renderer win :flags '(:renderer-accelerated))
-
+      (sdl2:with-renderer (renderer win :flags '(:accelerated :presentvsync))
         (sdl2:with-event-loop (:method :poll)
           (:keyup
            (:keysym keysym)
