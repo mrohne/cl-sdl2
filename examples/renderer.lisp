@@ -1,6 +1,7 @@
 (in-package :sdl2-examples)
 
 (require :sdl2)
+(require :cl-opengl)
 
 (defun test-render-clear (renderer)
   (sdl2:set-render-draw-color renderer 0 0 0 255)
