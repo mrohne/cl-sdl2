@@ -119,23 +119,21 @@ returning an SDL_true into CL's boolean type system."
                        (return-from handle-message))))
       (handler-bind ((error (lambda (e) (setf condition e))))
         (if chan
-            (sendmsg chan (multiple-value-list (without-fp-traps (funcall fun))))
-            (without-fp-traps (funcall fun)))))))
+            (sendmsg chan (multiple-value-list (funcall fun)))
+            (funcall fun))))))
 
 (defun recv-and-handle-message ()
   (let ((msg (recvmsg *main-thread-channel*)))
-    (handle-message msg)))
+    (without-fp-traps (handle-message msg))))
 
 (defun get-and-handle-messages ()
   (loop as msg = (getmsg *main-thread-channel*)
-        while msg do
-          (handle-message msg)))
+        while msg do (handle-message msg)))
 
 (defun sdl-main-thread ()
   (let ((*main-thread* (bt:current-thread))
         #+swank (swank:*sldb-quit-restart* 'continue)
         #+slynk (slynk:*sly-db-quit-restart* 'continue))
-    (format *trace-output* ";; SDL event loop: ~a~%" *main-thread*)
     (loop while *main-thread-channel* do
       (block loop-block
         (restart-bind ((continue (lambda (&optional v)
@@ -177,8 +175,6 @@ This does **not** call `SDL2:INIT` by itself.  Do this either with
 
 (defun init (&rest sdl-init-flags)
   "Initialize SDL2 with the specified subsystems. Initializes everything by default."
-  (unless *wakeup-event*
-    (setf *wakeup-event* (alloc 'sdl2-ffi:sdl-event)))
   (unless *main-thread-channel*
     (ensure-main-channel)
 
@@ -207,7 +203,9 @@ This does **not** call `SDL2:INIT` by itself.  Do this either with
     (let ((init-flags (autowrap:mask-apply 'sdl-init-flags sdl-init-flags)))
       (check-rc (sdl-init init-flags))
       (unless *lisp-message-event*
-        (setf *lisp-message-event* (sdl-register-events 1))
+        (setf *lisp-message-event* (sdl-register-events 1)))
+      (unless *wakeup-event*
+	(setf *wakeup-event* (alloc 'sdl2-ffi:sdl-event))
         (setf (c-ref *wakeup-event* sdl2-ffi:sdl-event :type) *lisp-message-event*)))))
 
 (defun quit ()

@@ -38,9 +38,9 @@
 (defmacro with-sdl-event ((event &optional (event-type :firstevent))
                           &body body)
   "Allocate and automatically free an sdl event struct."
-  `(c-let ((,event sdl2-ffi:sdl-event :from (new-event ,event-type)))
-     (unwind-protect (progn ,@body)
-       (free-event ,event))))
+  `(c-with ((,event sdl2-ffi:sdl-event))
+     (setf (,event :type) (get-event-code ,event-type))
+     ,@body))
 
 (defun add-user-data (user-data)
   (let* ((event-id (sdl-atomic-add *user-event-id* 1))
