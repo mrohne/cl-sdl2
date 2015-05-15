@@ -129,12 +129,12 @@ into CL's boolean type system."
                        (return-from handle-message))))
       (handler-bind ((error (lambda (e) (setf condition e))))
         (if chan
-            (sendmsg chan (multiple-value-list (without-fp-traps (funcall fun))))
-            (without-fp-traps (funcall fun)))))))
+            (sendmsg chan (multiple-value-list (funcall fun)))
+            (funcall fun))))))
 
 (defun recv-and-handle-message ()
   (let ((msg (recvmsg *main-thread-channel*)))
-    (handle-message msg)))
+    (without-fp-traps (handle-message msg))))
 
 (defun get-and-handle-messages ()
   (loop as msg = (getmsg *main-thread-channel*)
@@ -189,8 +189,6 @@ thread."
 
 (defun init (&rest sdl-init-flags)
   "Initialize SDL2 with the specified subsystems. Initializes everything by default."
-  (unless *wakeup-event*
-    (setf *wakeup-event* (alloc 'sdl2-ffi:sdl-event)))
   (unless *main-thread-channel*
     (ensure-main-channel)
     ;; On OSX, we need to run in the main thread; CCL and SBCL allow
