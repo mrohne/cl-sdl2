@@ -125,8 +125,7 @@ returning an SDL_true into CL's boolean type system."
 
 (defun get-and-handle-messages ()
   (loop as msg = (getmsg *main-thread-channel*)
-        while msg do
-          (handle-message msg)))
+     while msg do (handle-message msg)))
 
 (defun sdl-main-thread ()
   (let ((*main-thread* (bt:current-thread))
