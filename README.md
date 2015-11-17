@@ -1,4 +1,4 @@
-# sdl2
+# cl-sdl2
 
 ## Written by
 
