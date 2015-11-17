@@ -1,4 +1,4 @@
-# sdl2: A Common Lisp Wrapper for the SDL 2.0 C Library.
+# sdl2
 
 ## Written by
 
