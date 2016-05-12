@@ -69,6 +69,7 @@ returning an SDL_true into CL's boolean type system."
            (error 'sdl-rc-error :rc ,wrapper :string (sdl-get-error))
            ,wrapper))))
 
+(defvar *the-main-thread* nil)
 (defvar *main-thread-channel* nil)
 (defvar *main-thread* nil)
 (defvar *lisp-message-event* nil)
@@ -198,6 +199,7 @@ This does **not** call `SDL2:INIT` by itself.  Do this either with
 	(sb-thread:interrupt-thread (sb-thread:main-thread) #'sdl-main-thread))
     #+(and ccl darwin)
     (let ((thread (find 0 (ccl:all-processes) :key #'ccl:process-serial-number)))
+      (setf *the-main-thread* thread)
       (ccl:process-interrupt thread #'sdl-main-thread)))
   (in-main-thread (:no-event t)
     ;; HACK! glutInit on OSX uses some magic undocumented API to
@@ -217,10 +219,18 @@ This does **not** call `SDL2:INIT` by itself.  Do this either with
 
 (defun quit ()
   "Shuts down SDL2."
-  (in-main-thread (:no-event t)
-    (sdl-quit)
-    (setf *main-thread-channel* nil)
-    (setf *lisp-message-event* nil)))
+  (in-main-thread (:background t)
+    (let ((mtc *main-thread-channel*))
+      (sdl-quit)
+      (setf *main-thread-channel* nil)
+      (setf *lisp-message-event* nil)
+      (sendmsg mtc nil)))
+  (when (and *the-main-thread*
+             (not (eq *the-main-thread* (bt:current-thread))))
+    (bt:join-thread *the-main-thread*)
+    (setf *the-main-thread* nil))
+  (when *the-main-thread*
+    (setf *the-main-thread* nil)))
 
 (defmacro with-init ((&rest sdl-init-flags) &body body)
   `(progn
