@@ -224,7 +224,7 @@ This does **not** call `SDL2:INIT` by itself.  Do this either with
       (sdl-quit)
       (setf *main-thread-channel* nil)
       (setf *lisp-message-event* nil)
-      (sendmsg mtc nil)))
+      (when mtc (sendmsg mtc nil))))
   (when (and *the-main-thread*
              (not (eq *the-main-thread* (bt:current-thread))))
     (bt:join-thread *the-main-thread*)
