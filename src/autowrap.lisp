@@ -31,6 +31,7 @@
                     "sys/types.h"
 		    "_types/"
                     "SDL2")
+  :sysincludes `,(append #+openbsd (list "/usr/X11R6/include"))
   :exclude-definitions ("SDL_LogMessageV"
                         "SDL_vsnprintf"
                         "_inline$"
