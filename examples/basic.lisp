@@ -62,8 +62,8 @@
                        mod-value)))
 
             (:keyup (:keysym keysym)
-             (when (sdl2:scancode= (sdl2:scancode-value keysym) :scancode-escape)
-               (sdl2:push-event :quit)))
+                    (when (sdl2:scancode= (sdl2:scancode-value keysym) :scancode-escape)
+                      (sdl2:push-event :quit)))
 
             (:mousemotion
              (:x x :y y :xrel xrel :yrel yrel :state state)
@@ -76,29 +76,26 @@
                      controller-id axis-id value))
 
             (:controllerbuttondown (:which controller-id)
-             (let ((h (cdr (assoc controller-id haptic))))
-               (when h
-                 (sdl2:rumble-play h 1.0 100))))
+                                   (let ((h (cdr (assoc controller-id haptic))))
+                                     (when h
+                                       (sdl2:rumble-play h 1.0 100))))
 
             (:idle ()
-             (gl:clear :color-buffer)
-             (gl:begin :triangles)
-             (gl:color 1.0 0.0 0.0)
-             (gl:vertex 0.0 1.0)
-             (gl:vertex -1.0 -1.0)
-             (gl:vertex 1.0 -1.0)
-             (gl:end)
-             (gl:flush)
-             (sdl2:gl-swap-window win))
+                   (gl:clear :color-buffer)
+                   (gl:begin :triangles)
+                   (gl:color 1.0 0.0 0.0)
+                   (gl:vertex 0.0 1.0)
+                   (gl:vertex -1.0 -1.0)
+                   (gl:vertex 1.0 -1.0)
+                   (gl:end)
+                   (gl:flush)
+                   (sdl2:gl-swap-window win))
 
             (:quit () t))
 
           (format t ";; Closing opened game controllers.~%")
           (finish-output)
-          ;; close any game controllers that were opened
-          ;; as well as any haptics
-          (loop for (i . controller) in controllers
-             do (progn
-                  (sdl2:game-controller-close controller)
-                  (sdl2:haptic-close (cdr (assoc i haptic))))))))))
-
+          ;; close any game controllers that were opened as well as any haptics
+          (loop :for (i . controller) :in controllers
+                :do (sdl2:game-controller-close controller)
+                    (sdl2:haptic-close (cdr (assoc i haptic)))))))))
