@@ -53,7 +53,7 @@ void main() {
             (gl:attach-shader program v-shader)
             (gl:attach-shader program f-shader)
             (gl:link-program program)
-            (format t "~A~%" (gl:get-program-info-log program))
+            (format t ";; ~A~%" (gl:get-program-info-log program))
             (gl:use-program program)))
       program)))
 

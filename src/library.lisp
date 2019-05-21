@@ -6,4 +6,13 @@
   (:windows "SDL2.dll")
   (t (:default "libSDL2")))
 
+#-:gamekit
+(cffi:define-foreign-library libsdl2-ttf
+  (:darwin (:default "libSDL2_ttf"))
+  (t  (:default "libSDL2_ttf")))
+
+#-:gamekit
 (cffi:use-foreign-library libsdl2)
+
+#-:gamekit
+(cffi:use-foreign-library libsdl2-ttf)

@@ -27,6 +27,7 @@ into CL's boolean type system."
   sdl2-ffi:+sdl-init-joystick+
   sdl2-ffi:+sdl-init-haptic+
   sdl2-ffi:+sdl-init-gamecontroller+
+  sdl2-ffi:+sdl-init-events+
   sdl2-ffi:+sdl-init-noparachute+
   '(:everything . #x0000FFFF))
 
@@ -41,7 +42,14 @@ into CL's boolean type system."
 (defmacro check-rc (form)
   (with-gensyms (rc)
     `(let ((,rc ,form))
-       (when (minusp ,rc)
+       (when (< ,rc 0)
+         (error 'sdl-rc-error :rc ,rc :string (sdl-get-error)))
+       ,rc)))
+
+(defmacro check-not-below (form lower-limit)
+  (with-gensyms (rc)
+    `(let ((,rc ,form))
+       (when (< ,rc ,lower-limit)
          (error 'sdl-rc-error :rc ,rc :string (sdl-get-error)))
        ,rc)))
 
@@ -79,25 +87,31 @@ into CL's boolean type system."
 (defvar *lisp-message-event* nil)
 (defvar *wakeup-event* nil)
 
+;; Shamelessly stolen from cl-glut
+(defmacro without-fp-traps (&body body)
+  #+(and sbcl (or x86 x86-64))
+  `(sb-int:with-float-traps-masked (:underflow :overflow :inexact :invalid :divide-by-zero)
+     ,@body)
+  #-(and sbcl (or x86 x86-64))
+  `(progn ,@body))
+
 (defmacro in-main-thread ((&key background no-event) &body b)
   (with-gensyms (fun channel)
     `(let ((,fun (lambda () ,@b)))
-       (if (or *main-thread-channel* *main-thread*)
-           (if *main-thread*
-               (funcall ,fun)
-               ,(if background
-                    `(progn
-                       (sendmsg *main-thread-channel* (cons ,fun nil))
-                       (values))
-                    `(let ((,channel (make-channel)))
-                       (sendmsg *main-thread-channel* (cons ,fun ,channel))
-                       ,(unless no-event
-                          '(push-event *wakeup-event*))
-                       (let ((result (recvmsg ,channel)))
-                         (etypecase result
-                           (list (values-list result))
-                           (error (error result)))))))
-           (error "No main thread, did you call SDL_Init?")))))
+       (assert *main-thread-channel* nil "No main thread, did you call SDL_Init?")
+       (if *main-thread*
+	   (without-fp-traps (funcall ,fun))
+	   ,(if background
+		`(progn
+		   (sendmsg *main-thread-channel* (cons ,fun nil))
+		   (values))
+		`(let ((,channel (make-channel)))
+		   (sendmsg *main-thread-channel* (cons ,fun ,channel))
+		   ,(unless no-event '(push-event *wakeup-event*))
+		   (let ((result (recvmsg ,channel)))
+		     (etypecase result
+		       (list (values-list result))
+		       (error (error result))))))))))
 
 (defun handle-message (msg)
   (let ((fun (car msg))
@@ -115,25 +129,16 @@ into CL's boolean type system."
                        (return-from handle-message))))
       (handler-bind ((error (lambda (e) (setf condition e))))
         (if chan
-            (sendmsg chan (multiple-value-list (funcall fun)))
-            (funcall fun))))))
+            (sendmsg chan (multiple-value-list (without-fp-traps (funcall fun))))
+            (without-fp-traps (funcall fun)))))))
 
 (defun recv-and-handle-message ()
   (let ((msg (recvmsg *main-thread-channel*)))
     (handle-message msg)))
 
 (defun get-and-handle-messages ()
-  (loop :as msg = (and *main-thread-channel*
-                       (getmsg *main-thread-channel*))
-        :while msg :do
-          (handle-message msg)))
-
-(defmacro without-fp-traps (&body body)
-  #+sbcl
-  `(sb-int:with-float-traps-masked (:underflow :overflow :inexact :invalid :divide-by-zero)
-     ,@body)
-  #-sbcl
-  `(progn ,@body))
+  (loop as msg = (getmsg *main-thread-channel*)
+     while msg do (handle-message msg)))
 
 (defun sdl-main-thread ()
   (without-fp-traps
@@ -181,13 +186,15 @@ thread."
     (setf *wakeup-event* (alloc 'sdl2-ffi:sdl-event)))
   (unless *main-thread-channel*
     (ensure-main-channel)
-
-    ;; If we did not have a main-thread channel, make a default main thread.
-    #-(and ccl darwin)
-    (setf *the-main-thread* (bt:make-thread #'sdl-main-thread :name "SDL2 Main Thread"))
-
-    ;; On OSX, we need to run in the main thread; CCL allows us to safely do this. On other
-    ;; platforms (mainly GLX?), we just need to run in a dedicated thread.
+    ;; On OSX, we need to run in the main thread; CCL and SBCL allow
+    ;; us to safely do this.  On other platforms (mainly GLX?), we
+    ;; just need to run in a dedicated thread.
+    #-darwin
+    (bt:make-thread #'sdl-main-thread :name "SDL2 Main Thread")
+    #+(and sbcl darwin)
+    (if (sb-thread:main-thread-p)
+	(format *trace-output* ";; Please run ~s in ~s~%" #'make-this-thread-main (sb-thread:main-thread))
+	(sb-thread:interrupt-thread (sb-thread:main-thread) #'sdl-main-thread))
     #+(and ccl darwin)
     (let ((thread (find 0 (ccl:all-processes) :key #'ccl:process-serial-number)))
       (setf *the-main-thread* thread)

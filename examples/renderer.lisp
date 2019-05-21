@@ -1,6 +1,7 @@
 (in-package :sdl2-examples)
 
 (require :sdl2)
+(require :cl-opengl)
 
 (defun test-render-clear (renderer)
   (sdl2:set-render-draw-color renderer 0 0 0 255)
@@ -71,7 +72,7 @@
   "Test the SDL_render.h API"
   (sdl2:with-init (:everything)
     (sdl2:with-window (win :title "SDL2 Renderer API Demo" :flags '(:shown))
-      (sdl2:with-renderer (renderer win :flags '(:accelerated))
+      (sdl2:with-renderer (renderer win :flags '(:accelerated :presentvsync))
         (sdl2:with-event-loop (:method :poll)
           (:keyup
            (:keysym keysym)

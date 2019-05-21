@@ -109,16 +109,18 @@ Stores the optional user-data in sdl2::*user-events*"
   (push-event :quit))
 
 (defun next-event (event &optional (method :poll) timeout)
-  "Method can be either :poll, :wait. If :wait is used, `TIMEOUT` may be specified."
-  (case method
-    (:poll (sdl-poll-event event))
-    (:wait
-     (if timeout
-         (sdl-wait-event-timeout event timeout)
-         (sdl-wait-event event)))
-    (:wait-with-timeout
-     (sdl-wait-event-timeout event (or timeout 0)))
-    (otherwise (error "Event method must be :poll or :wait"))))
+  "Method can be either :poll, :wait.  If :wait is used,
+`TIMEOUT` may be specified."
+  (without-fp-traps
+    (case method
+      (:poll (sdl-poll-event event))
+      (:wait
+       (if timeout
+	   (sdl-wait-event-timeout event timeout)
+	   (sdl-wait-event event)))
+      (:wait-with-timeout
+       (sdl-wait-event-timeout event (or timeout 0)))
+      (otherwise (error "Event method must be :poll or :wait")))))
 
 (defun expand-idle-handler (event-handlers)
   (remove nil (mapcar #'(lambda (handler)
