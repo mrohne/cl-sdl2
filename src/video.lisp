@@ -184,7 +184,7 @@ Specifying `:windowed` or `:desktop` is \"windowed\" fullscreen, using
   (check-nullptr (sdl-gl-create-context win)))
 
 (defun gl-delete-context (gl-context)
-  (sdl-gl-delete-context gl-context)
+  (sdl-gl-delete-context (autowrap:ptr gl-context))
   (autowrap:invalidate gl-context)
   (values))
 
@@ -198,7 +198,7 @@ Specifying `:windowed` or `:desktop` is \"windowed\" fullscreen, using
   (sdl-gl-extension-supported extension))
 
 (defun gl-make-current (win gl-context)
-  (check-rc (sdl-gl-make-current win gl-context)))
+  (check-rc (sdl-gl-make-current win (autowrap:ptr gl-context))))
 
 (defun gl-get-swap-interval ()
   (sdl-gl-get-swap-interval))

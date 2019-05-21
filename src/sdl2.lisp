@@ -90,7 +90,7 @@ into CL's boolean type system."
 ;; Shamelessly stolen from cl-glut
 (defmacro without-fp-traps (&body body)
   #+(and sbcl (or x86 x86-64))
-  `(sb-int:with-float-traps-masked (:invalid :inexact :divide-by-zero :overflow)
+  `(sb-int:with-float-traps-masked (:underflow :overflow :inexact :invalid :divide-by-zero)
      ,@body)
   #-(and sbcl (or x86 x86-64))
   `(progn ,@body))
@@ -139,13 +139,6 @@ into CL's boolean type system."
 (defun get-and-handle-messages ()
   (loop as msg = (getmsg *main-thread-channel*)
      while msg do (handle-message msg)))
-
-(defmacro without-fp-traps (&body body)
-  #+sbcl
-  `(sb-int:with-float-traps-masked (:underflow :overflow :inexact :invalid :divide-by-zero)
-     ,@body)
-  #-sbcl
-  `(progn ,@body))
 
 (defun sdl-main-thread ()
   (without-fp-traps
@@ -212,7 +205,7 @@ thread."
     ;; to be honest.
     #+(and ccl darwin)
     (cl-glut:init)
-    (let ((init-flags (mask-apply 'sdl-init-flags sdl-init-flags)))
+    (let ((init-flags (autowrap:mask-apply 'sdl-init-flags sdl-init-flags)))
       (check-rc (sdl-init init-flags))
       (unless *lisp-message-event*
         (setf *lisp-message-event* (sdl-register-events 1)

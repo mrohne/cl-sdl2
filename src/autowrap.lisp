@@ -1,5 +1,8 @@
 (cl:in-package :sdl2-ffi)
-
+(cl:eval-when 
+    (:compile-toplevel :load-toplevel :execute)
+  (cl:pushnew (cl:cons "INF" sb-ext:long-float-positive-infinity) 
+	      cl-json::+json-lisp-symbol-tokens+))
 (autowrap:c-include
  '(sdl2 autowrap-spec "SDL2.h")
  :accessor-package :sdl2-ffi.accessors
@@ -8,15 +11,28 @@
  :exclude-sources ("/usr/local/lib/clang/([^/]*)/include/(?!stddef.h)"
                    "/usr/include/"
                    "/usr/include/arm-linux-gnueabihf"
-                   "/usr/include/X11/")
+                   "/usr/include/X11/"
+		   #+darwin
+		   "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/"
+		   #+darwin
+		   "/opt/X11/include"
+		   )
  :include-sources ("stdint.h"
                    "bits/types.h"
                    "sys/types.h"
                    "bits/stdint"
                    "machine/_types.h"
+		   #+darwin
+		   "i386/_types.h"
+		   #+darwin
+		   "include/_types/"
+		   #+darwin
+		   "include/sys/_types/"
                    "SDL2")
  :sysincludes `,(cl:append
                  #+openbsd (cl:list "/usr/X11R6/include")
+		 #+darwin
+		 (cl:list "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include")
                  #+(and unix (not darwin))
                  (cl:list "/usr/lib/gcc/x86_64-pc-linux-gnu/7.3.1/include/"))
  :exclude-definitions ("SDL_main"
@@ -37,4 +53,5 @@
                      ("SDL_TRUE" . "TRUE")
                      ("SDL_FALSE" . "FALSE"))
  :no-accessors cl:t
- :release-p cl:t)
+ :trace-c2ffi cl:t
+ :release-p cl:nil)
